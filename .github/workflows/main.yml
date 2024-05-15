@@ -1,0 +1,119 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.9
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install fastapi uvicorn
+
+    - name: Build Docker image
+      run: |
+        docker buildx build --platform linux/amd64 -t ${{ secrets.DOCKER_USERNAME }}/fastapi-crud:latest --push .
+
+    - name: Log in to Docker Hub
+      run: echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+
+    - name: Push Docker image
+      run: docker push ${{ secrets.DOCKER_USERNAME }}/fastapi-crud:latest
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Install Azure CLI
+      run: |
+        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+
+    - name: Azure login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v1
+
+    - name: Terraform Init
+      run: terraform init
+
+    - name: Check if Resource Group Exists
+      id: rg-check
+      run: |
+        az group show --name az-rg-1 || echo "Resource group not found"
+
+    - name: Check if AKS Cluster Exists
+      id: aks-check
+      run: |
+        az aks show --resource-group az-rg-1 --name newlook-cluster || echo "AKS cluster not found"
+
+    - name: Import Resource Group if Exists
+      if: steps.rg-check.outputs.result == ''
+      run: |
+        terraform import azurerm_resource_group.aks /subscriptions/dbbcf5d5-eb47-4104-b44d-ff6bda2d8d5b/resourceGroups/az-rg-1
+
+    - name: Import AKS Cluster if Exists
+      if: steps.aks-check.outputs.result == ''
+      run: |
+        terraform import azurerm_kubernetes_cluster.aks /subscriptions/dbbcf5d5-eb47-4104-b44d-ff6bda2d8d5b/resourceGroups/az-rg-1/providers/Microsoft.ContainerService/managedClusters/newlook-cluster
+
+    - name: Terraform Apply
+      run: terraform apply -auto-approve
+
+    - name: Configure kubectl
+      run: |
+        az aks get-credentials --resource-group az-rg-1 --name newlook-cluster
+
+    - name: Verify kubectl Context
+      run: kubectl config current-context
+
+    - name: Get Services
+      run: kubectl get svc
+
+    - name: Deploy to AKS
+      run: |
+        kubectl apply -f k8s/deployment.yaml --validate=false
+        kubectl apply -f k8s/service.yaml --validate=false
+
+    - name: Wait for Load Balancer IP
+      run: |
+        echo "Waiting for external IP..."
+        for _ in {1..30}; do
+          EXTERNAL_IP=$(kubectl get svc fastapi-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          if [ "$EXTERNAL_IP" != "" ]; then
+            echo "External IP is $EXTERNAL_IP"
+            echo "::set-output name=external_ip::$EXTERNAL_IP"
+            break
+          fi
+          echo "Waiting for external IP..."
+          sleep 10
+        done
+      id: get-external-ip
+
+    - name: Output External IP
+      run: echo "FastAPI is available at http://${{ steps.get-external-ip.outputs.external_ip }}"
+
+    - name: Test the FastAPI Endpoints
+      run: |
+        EXTERNAL_IP=${{ steps.get-external-ip.outputs.external_ip }}
+        curl -X POST http://$EXTERNAL_IP/items/ -H "Content-Type: application/json" -d '{"id": 1, "name": "Item 1", "price": 10.5}'
+        curl http://$EXTERNAL_IP/items/
