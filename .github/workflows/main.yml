@@ -23,15 +23,12 @@ jobs:
         python -m pip install --upgrade pip
         pip install fastapi uvicorn
 
-    - name: Build Docker image
-      run: |
-        docker buildx build --platform linux/amd64 -t ${{ secrets.DOCKER_USERNAME }}/fastapi-crud:latest --push .
-
     - name: Log in to Docker Hub
       run: echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
 
-    - name: Push Docker image
-      run: docker push ${{ secrets.DOCKER_USERNAME }}/fastapi-crud:latest
+    - name: Build Docker image
+      run: |
+        docker buildx build --platform linux/amd64 -t ${{ secrets.DOCKER_USERNAME }}/fastapi-crud:latest --push .
 
   deploy:
     runs-on: ubuntu-latest
