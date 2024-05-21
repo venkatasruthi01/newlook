@@ -233,3 +233,4 @@ To test the application locally, follow these steps:
 
 This setup demonstrates a complete CI/CD pipeline for deploying a FastAPI application to an AKS cluster using Docker and Terraform, with end-to-end automation managed by GitHub Actions. You can use the provided steps and commands to replicate and verify the deployment and functionality of the application.
 ```
+
