@@ -62,7 +62,7 @@ jobs:
     - name: Import Resource Group if Not Managed
       if: ${{ steps.rg-check.outputs.result == 'Resource group not found in state' }}
       run: |
-        terraform import azurerm_resource_group.aks /subscriptions/dbbcf5d5-eb47-4104-b44d-ff6bda2d8d5b/resourceGroups/az-rg-1
+        terraform import azurerm_resource_group.aks /subscriptions/3351389d-0046-4c6b-b23f-6b080c7a72ca/resourceGroups/az-rg-1
 
     - name: Check if AKS Cluster is Managed by Terraform
       id: aks-check
@@ -73,7 +73,7 @@ jobs:
     - name: Import AKS Cluster if Not Managed
       if: ${{ steps.aks-check.outputs.result == 'AKS cluster not found in state' }}
       run: |
-        terraform import azurerm_kubernetes_cluster.aks /subscriptions/dbbcf5d5-eb47-4104-b44d-ff6bda2d8d5b/resourceGroups/az-rg-1/providers/Microsoft.ContainerService/managedClusters/newlook-cluster
+        terraform import azurerm_kubernetes_cluster.aks /subscriptions/3351389d-0046-4c6b-b23f-6b080c7a72ca/resourceGroups/az-rg-1/providers/Microsoft.ContainerService/managedClusters/newlook-cluster
 
     - name: Terraform Apply
       run: terraform apply -auto-approve
